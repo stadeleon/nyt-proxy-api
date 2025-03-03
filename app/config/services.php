@@ -16,6 +16,7 @@ return [
 
     'nyt' => [
         'api_key' => env('NYT_API_KEY'),
+        'bestsellers_cache_ttl' => env('NYT_BESTSELLERS_CACHE_TTL', 3600),
     ],
 
     'postmark' => [

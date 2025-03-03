@@ -28,13 +28,22 @@ class NytBestsellersExternalTest extends TestCase
     {
         return [
             'valid isbn external' => [
-                '/api/v1/nyt-bestsellers?isbn=9781451627282',
+                '/api/v1/nyt-bestsellers?isbn[]=9781451627282',
                 200,
                 [
                     "status" => "OK",
+                    "num_results" => 1,
                 ],
             ],
-            'missing isbn external' => [
+            'multiple valid isbns external' => [
+                '/api/v1/nyt-bestsellers?isbn[]=9781451627282&isbn[]=9780399169274',
+                200,
+                [
+                    "status" => "OK",
+                    "num_results" => 2,
+                ],
+            ],
+            'no isbn external' => [
                 '/api/v1/nyt-bestsellers',
                 200,
                 [
@@ -48,7 +57,7 @@ class NytBestsellersExternalTest extends TestCase
     #[Group('external')]
     public function testExternalScenarioWithoutMock(): void
     {
-        $response = $this->getJson('/api/v1/nyt-bestsellers?isbn=9781451627282');
+        $response = $this->getJson('/api/v1/nyt-bestsellers?isbn[]=9781451627282');
         $response->assertStatus(200);
     }
 }

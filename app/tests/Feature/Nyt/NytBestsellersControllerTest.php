@@ -15,13 +15,17 @@ class NytBestsellersControllerTest extends TestCase
     public function testBestsellersEndpointVariousScenarios(
         string $query,
         int $expectedStatus,
-        array $fakeResponse,
-        array $expectedJson
+        array $expectedJson,
+        array $fakeResponse = null
     ): void {
         Cache::flush();
-        Http::fake([
-            '*nytimes.com*' => Http::response($fakeResponse, 200),
-        ]);
+        if ($fakeResponse) {
+            Http::fake([
+                '*nytimes.com*' => Http::response($fakeResponse, 200),
+            ]);
+        } else {
+            $this->getFakerForMultipleISBNs();
+        }
 
         $response = $this->getJson($query);
 
@@ -29,11 +33,63 @@ class NytBestsellersControllerTest extends TestCase
         $response->assertJsonFragment($expectedJson);
     }
 
+    private function getFakerForMultipleISBNs() {
+        return Http::fake(function ($request) {
+            $query = $request->url();
+
+            if (str_contains($query, 'isbn=9781451627282')) {
+                return Http::response([
+                    "status" => "OK",
+                    "num_results" => 1,
+                    "results" => [
+                        [
+                            "title" => "11/22/63",
+                            "author" => "Stephen King",
+                        ],
+                    ]
+                ], 200);
+            }
+
+            if (str_contains($query, 'isbn=9780399169274')) {
+                return Http::response([
+                    "status" => "OK",
+                    "num_results" => 1,
+                    "results" => [
+                        [
+                            "title" => "#GIRLBOSS",
+                            "author" => "Sophia Amoruso",
+                        ],
+                    ]
+                ], 200);
+            }
+
+            return Http::response(["status" => "OK", "num_results" => 0, "results" => []], 200);
+        });
+    }
+
     public static function bestsellersDataProvider(): array
     {
         return [
+            'multiple valid isbns' => [
+                '/api/v1/nyt-bestsellers?isbn[]=9781451627282&isbn[]=9780399169274',
+                200,
+                [
+                    "status" => "OK",
+                    "num_results" => 2,
+                    "results" => [
+                        [
+                            "title" => "11/22/63",
+                            "author" => "Stephen King",
+                        ],
+                        [
+                            "title" => "#GIRLBOSS",
+                            "author" => "Sophia Amoruso",
+                        ],
+                    ]
+                ]
+            ],
             'valid isbn' => [
-                '/api/v1/nyt-bestsellers?isbn=9781451627282',
+                '/api/v1/nyt-bestsellers?isbn[]=9781451627282',
                 200,
                 [
                     "status" => "OK",
@@ -63,21 +119,24 @@ class NytBestsellersControllerTest extends TestCase
                 ],
             ],
             'non-existing isbn' => [
-                '/api/v1/nyt-bestsellers?isbn=DOESNOTEXIST',
+                '/api/v1/nyt-bestsellers?isbn[]=DOESNOTEXIST',
                 200,
+                [
+                    "status" => "OK",
+                    "num_results" => 0,
+                ],
                 [
                     "status" => "OK",
                     "num_results" => 0,
                     "results" => [],
                 ],
-                [
-                    "status" => "OK",
-                    "num_results" => 0,
-                ],
             ],
-            'missing isbn' => [
+            'no isbn' => [
                 '/api/v1/nyt-bestsellers',
                 200,
+                [
+                    "num_results" => 5,
+                ],
                 [
                     "status" => "OK",
                     "num_results" => 5,
@@ -87,9 +146,6 @@ class NytBestsellersControllerTest extends TestCase
                             "author" => "Author Name"
                         ],
                     ]
-                ],
-                [
-                    "num_results" => 5,
                 ],
             ],
             'author and title provided' => [
@@ -158,10 +214,10 @@ class NytBestsellersControllerTest extends TestCase
             '*nytimes.com*' => Http::response([], 500),
         ]);
 
-        $response = $this->getJson('/api/v1/nyt-bestsellers?isbn=FAIL');
+        $response = $this->getJson('/api/v1/nyt-bestsellers?isbn[]=FAIL');
 
         $response->assertStatus(200);
-        $response->assertExactJson([]);
+        $response->assertExactJson(["num_results"=> 0, "results" => [],"status"=> "OK"]);
     }
 
     #[Test]
@@ -176,8 +232,45 @@ class NytBestsellersControllerTest extends TestCase
     public function testInvalidIsbnTooLong(): void
     {
         $isbn = str_repeat('9', 50);
-        $response = $this->getJson('/api/v1/nyt-bestsellers?isbn=' . $isbn);
+        $response = $this->getJson('/api/v1/nyt-bestsellers?isbn[]=' . $isbn);
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['isbn.0']);
+    }
+
+    #[Test]
+    public function testInvalidIsbnShouldBeArray(): void
+    {
+        $response = $this->getJson('/api/v1/nyt-bestsellers?isbn=9781451627282,9780399169274');
+
         $response->assertStatus(422);
         $response->assertJsonValidationErrors(['isbn']);
+    }
+
+    #[Test]
+    public function testIsbnCacheMechanism(): void
+    {
+        Cache::flush();
+        Http::fake([
+            '*nytimes.com*' => Http::response([
+                "status" => "OK",
+                "num_results" => 1,
+                "results" => [
+                    [
+                        "title" => "Cached Book",
+                        "author" => "Cached Author",
+                    ]
+                ]
+            ], 200),
+        ]);
+
+        $this->getJson('/api/v1/nyt-bestsellers?isbn[]=9781451627282');
+        $this->assertTrue(Cache::has('nyt.bestsellers.' . md5(json_encode(['isbn' => '9781451627282']))));
+
+        Http::fake([
+            '*nytimes.com*' => Http::response([], 500),
+        ]);
+
+        $response = $this->getJson('/api/v1/nyt-bestsellers?isbn[]=9781451627282');
+        $response->assertJsonFragment(["title" => "Cached Book"]);
     }
 }

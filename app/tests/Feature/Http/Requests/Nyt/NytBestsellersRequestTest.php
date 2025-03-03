@@ -13,7 +13,7 @@ class NytBestsellersRequestTest extends TestCase
         $data = [
             'author' => 'John Doe',
             'title'  => 'Great Book',
-            'isbn'   => '1234567890123',
+            'isbn[]'   => '1234567890123',
             'offset' => 10,
         ];
 

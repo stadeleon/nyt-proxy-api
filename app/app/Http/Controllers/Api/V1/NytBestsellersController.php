@@ -26,11 +26,16 @@ use OpenApi\Attributes as OA;
             schema: new OA\Schema(type: 'string')
         ),
         new OA\Parameter(
-            name: 'isbn',
+            name: 'isbn[]',
             description: 'Filter by ISBN',
             in: 'query',
             required: false,
-            schema: new OA\Schema(type: 'string')
+            schema: new OA\Schema(
+                type: 'array',
+                items: new OA\Items(type: 'string')
+            ),
+            style: 'form',
+            explode: true
         ),
         new OA\Parameter(
             name: 'offset',
@@ -43,21 +48,35 @@ use OpenApi\Attributes as OA;
     responses: [
         new OA\Response(
             response: 200,
-            description: 'Success',
+            description: "Success",
             content: new OA\JsonContent(
                 properties: [
+                    new OA\Property(property: "status", type: "string", example: "OK"),
+                    new OA\Property(property: "num_results", type: "integer", example: 2),
                     new OA\Property(
-                        property: 'data',
-                        type: 'array',
-                        items: new OA\Items(type: 'object')
+                        property: "results",
+                        type: "array",
+                        items: new OA\Items(
+                            properties: [
+                                new OA\Property(property: "title", type: "string", example: "11/22/63"),
+                                new OA\Property(property: "author", type: "string", example: "Stephen King"),
+                                new OA\Property(property: "description", type: "string", example: "An English teacher travels back to 1958..."),
+                                new OA\Property(property: "contributor", type: "string", example: "by Stephen King"),
+                                new OA\Property(property: "publisher", type: "string", example: "Pocket Books")
+                            ]
+                        )
                     )
                 ],
-                type: 'object'
+                type: "object"
             )
         ),
         new OA\Response(
             response: 403,
             description: 'Unauthorized access'
+        ),
+        new OA\Response(
+            response: 422,
+            description: "Validation Error"
         )
     ]
 )]
